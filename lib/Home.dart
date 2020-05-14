@@ -1,5 +1,6 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-
+import 'dart:async';
 import 'Mapa.dart';
 
 class Home extends StatefulWidget {
@@ -9,21 +10,20 @@ class Home extends StatefulWidget {
 
 class _HomeState extends State<Home> {
 
-  List _list = [
-    "Rio de Janeiro",
-    "São Paulo",
-    "Orlando",
-    "Maragogi",
-    "Porto de Galinhas",
-    "Arraial D'Ajuda"
-  ];
+  final _controller = StreamController<QuerySnapshot>.broadcast();
+  Firestore _db = Firestore.instance;
 
-  _openMap(){
-
+  _openMap(String idTrip){
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => Mapa(idTrip: idTrip)
+        )
+    );
   }
 
-  _deleteTrip(){
-
+  _deleteTrip(String idTrip){
+    _db.collection("trips").document(idTrip).delete();
   }
 
   _addLocal(){
@@ -33,6 +33,20 @@ class _HomeState extends State<Home> {
             builder: (_) => Mapa()
         )
     );
+  }
+
+  _addListenerTrips(){
+    final stream = _db.collection("trips").snapshots();
+
+    stream.listen((data) {
+      _controller.add(data);
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _addListenerTrips();
   }
 
   @override
@@ -46,44 +60,63 @@ class _HomeState extends State<Home> {
               _addLocal();
             },
       ),
-      body: Column(
-        children: <Widget>[
-          Expanded(
-            child: ListView.builder(
-              itemCount: _list.length,
-                itemBuilder: (context, index){
-                String title = _list[index];
-                return GestureDetector(
-                  onTap: (){
-                    _openMap();
-                  },
-                  child: Card(
-                    child: ListTile(
-                      title: Text(title),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          GestureDetector(
-                            onTap: (){
-                              _deleteTrip();
-                            },
-                            child: Padding(
-                              padding: EdgeInsets.all(8),
-                              child: Icon(
-                                Icons.remove_circle,
-                                color: Colors.red,
+      body: StreamBuilder<QuerySnapshot>(
+          stream: _controller.stream,
+          builder: (context, snapshot){
+            switch(snapshot.connectionState){
+              case ConnectionState.none:
+              case ConnectionState.waiting:
+              case ConnectionState.active:
+              case ConnectionState.none:
+                QuerySnapshot querySnapshot = snapshot.data;
+                List<DocumentSnapshot> trips = querySnapshot.documents.toList();
+
+                return Column(
+                  children: <Widget>[
+                    Expanded(
+                      child: ListView.builder(
+                          itemCount: trips.length,
+                          itemBuilder: (context, index){
+
+                            DocumentSnapshot item = trips[index];
+                            String title = item["title"];
+                            String idTrip = item.documentID;
+
+                            return GestureDetector(
+                              onTap: (){
+                                _openMap(idTrip);
+                              },
+                              child: Card(
+                                child: ListTile(
+                                  title: Text(title),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      GestureDetector(
+                                        onTap: (){
+                                          _deleteTrip(idTrip);
+                                        },
+                                        child: Padding(
+                                          padding: EdgeInsets.all(8),
+                                          child: Icon(
+                                            Icons.remove_circle,
+                                            color: Colors.red,
+                                          ),
+                                        ),
+                                      )
+                                    ],
+                                  ),
+                                ),
                               ),
-                            ),
-                          )
-                        ],
+                            );
+                          }
                       ),
-                    ),
-                  ),
+                    )
+                  ],
                 );
-              }
-            ),
-          )
-        ],
+                break;
+            }
+          }
       ),
     );
   }

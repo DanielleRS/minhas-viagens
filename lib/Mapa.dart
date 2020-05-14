@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 
 class Mapa extends StatefulWidget {
+
+  String idTrip;
+  Mapa({this.idTrip});
+
   @override
   _MapState createState() => _MapState();
 }
@@ -16,12 +21,13 @@ class _MapState extends State<Mapa> {
       target: LatLng(-23.562436, -46.655005),
       zoom: 18
   );
+  Firestore _db = Firestore.instance;
 
   _onMapCreated(GoogleMapController controller){
     _controller.complete(controller);
   }
 
-  _displayMarker(LatLng latLng) async {
+  _addMarker(LatLng latLng) async {
 
     List<Placemark> listAddress = await Geolocator().placemarkFromCoordinates(latLng.latitude, latLng.longitude);
 
@@ -39,6 +45,13 @@ class _MapState extends State<Mapa> {
 
       setState(() {
         _markers.add(marker);
+
+        Map<String, dynamic> trip = Map();
+        trip["title"] = street;
+        trip["latitude"] = latLng.latitude;
+        trip["longitude"] = latLng.longitude;
+
+        _db.collection("trips").add(trip);
       });
     }
     }
@@ -66,10 +79,46 @@ class _MapState extends State<Mapa> {
     });
   }
 
+  _retrievesTripToId(String idTrip) async {
+    if(idTrip != null){
+      DocumentSnapshot documentSnapshot = await _db
+          .collection("trips")
+          .document(idTrip)
+          .get();
+
+      var data = documentSnapshot.data;
+      String title = data["title"];
+      LatLng latLng = LatLng(
+          data["latitude"],
+          data["longitude"]
+      );
+
+      setState(() {
+        Marker marker = Marker(
+            markerId: MarkerId("marcador-${latLng.latitude}-${latLng.longitude}"),
+            position: latLng,
+            infoWindow: InfoWindow(
+                title: title
+            )
+        );
+
+        _markers.add(marker);
+        _positionCamera = CameraPosition(
+            target: latLng,
+          zoom: 18
+        );
+        _moveCamera();
+      });
+
+    } else {
+      _addListenerLocation();
+    }
+  }
+
   @override
   void initState() {
     // TODO: implement initState
-    _addListenerLocation();
+    _retrievesTripToId(widget.idTrip);
   }
 
   @override
@@ -82,7 +131,7 @@ class _MapState extends State<Mapa> {
           mapType: MapType.normal,
             initialCameraPosition: _positionCamera,
           onMapCreated: _onMapCreated,
-          onLongPress: _displayMarker,
+          onLongPress: _addMarker,
         ),
       ),
     );
